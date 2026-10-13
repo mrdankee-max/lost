@@ -11,17 +11,139 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: android-actions/setup-android@v3
-      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Create Android project
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/com/example/lostbtc
+          mkdir -p .github/workflows
+
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "LostBTC"
+          include(":app")
+          EOF
+
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          EOF
+
+          echo "android.useAndroidX=true" > gradle.properties
+
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.example.lostbtc"
+              compileSdk = 35
+              defaultConfig {
+                  applicationId = "com.example.lostbtc"
+                  minSdk = 24
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+          }
+          dependencies {
+              implementation("org.bitcoinj:bitcoinj-core:0.16.3")
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <application android:theme="@android:style/Theme.Material.NoActionBar"
+                  android:label="Lost BTC">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/example/lostbtc/MainActivity.kt <<'EOF'
+          package com.example.lostbtc
+
+          import android.app.Activity
+          import android.os.Bundle
+          import android.graphics.Color
+          import android.view.Gravity
+          import android.widget.*
+          import org.bitcoinj.core.ECKey
+          import org.bitcoinj.params.MainNetParams
+
+          class MainActivity : Activity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  window.statusBarColor = Color.rgb(12,14,18)
+                  val layout = LinearLayout(this)
+                  layout.orientation = LinearLayout.VERTICAL
+                  layout.setPadding(24,32,24,24)
+                  layout.setBackgroundColor(Color.rgb(12,14,18))
+
+                  val title = TextView(this)
+                  title.text = "LOST BTC"
+                  title.textSize = 30f
+                  title.gravity = Gravity.CENTER
+                  title.setTextColor(Color.rgb(247,147,26))
+                  layout.addView(title)
+
+                  val output = TextView(this)
+                  output.text = "Создай собственный Bitcoin-кошелёк."
+                  output.textSize = 15f
+                  output.setTextColor(Color.WHITE)
+                  layout.addView(output)
+
+                  val create = Button(this)
+                  create.text = "СОЗДАТЬ КОШЕЛЁК"
+                  create.setOnClickListener {
+                      val key = ECKey()
+                      val address = key.toAddress(MainNetParams.get())
+                      val wif = key.getPrivateKeyAsWiF(MainNetParams.get())
+                      output.text = "Адрес:\\n$address\\n\\nПриватный ключ WIF:\\n$wif\\n\\nСохрани ключ офлайн. Не отправляй его никому."
+                  }
+                  layout.addView(create)
+                  setContentView(layout)
+              }
+          }
+          EOF
+
       - name: Build APK
         run: gradle assembleDebug
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: LostBTC-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
